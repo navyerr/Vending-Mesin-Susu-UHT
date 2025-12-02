@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vending Susu UHT</title>
+
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#7c3aed;--muted:#94a3b8;--glass:rgba(255,255,255,0.05)}
+    *{box-sizing:border-box;font-family:Inter,system-ui}
+    body{margin:0;min-height:100vh;background:#071129;color:#e6eef8;display:flex;justify-content:center;padding:32px}
+    .wrap{width:1100px;max-width:96%;}
+    .card{background:var(--card);padding:20px;border-radius:14px;box-shadow:0 6px 30px rgba(2,6,23,0.6);margin-bottom:20px}
+    h1,h2{margin:0 0 10px}
+
+    .page{display:none}
+    .active{display:block}
+
+    .product-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-top:12px}
+    .prod{background:var(--glass);padding:12px;border-radius:12px;cursor:pointer;transition:.2s;border:2px solid transparent;text-align:center}
+    .prod:hover{transform:translateY(-4px)}
+    .prod.selected {border: none !important;}
+    .prod img{width:100%;border-radius:10px}
+    .price{font-weight:700;margin-top:6px}
+
+    .btn{padding:12px 20px;background:var(--accent);border:0;border-radius:10px;color:white;cursor:pointer;margin-top:18px;width:100%}
+
+    .coins{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+    .coin{padding:10px 14px;border-radius:10px;background:var(--glass);border:0;color:white;cursor:pointer}
+
+    .status{margin-top:18px;background:var(--glass);padding:12px;border-radius:10px}
+
+    #cartList{margin-top:20px}
+    .small-muted{color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- PAGE PRODUK -->
+  <div id="pageProducts" class="page active card">
+    <h1>Pilih Produk Susu UHT</h1>
+    <p class="small-muted">Pilih beberapa produk lalu lanjut ke pembayaran.</p>
+
+    <div class="product-list" id="productList"></div>
+
+    <h3>Keranjang:</h3>
+    <div id="cartList"><i>Belum ada produk</i></div>
+
+    <button class="btn" id="nextToPay">Lanjut ke Pembayaran →</button>
+  </div>
+
+
+  <!-- PAGE PEMBAYARAN -->
+  <div id="pagePay" class="page card">
+    <h2>Pembayaran</h2>
+
+    <div class="status">
+      <div>Total Harga: <strong id="totalHarga">Rp0</strong></div>
+      <div>Saldo Uang: <strong id="saldoDisplay">Rp0</strong></div>
+      <div>Status: <span id="statusText">Masukkan uang</span></div>
+      <div>Kembalian: <strong id="change">Rp0</strong></div>
+    </div>
+
+    <div class="coins">
+      <button class="coin" data-v="1000">1k</button>
+      <button class="coin" data-v="2000">2k</button>
+      <button class="coin" data-v="5000">5k</button>
+      <button class="coin" data-v="10000">10k</button>
+      <button class="coin" data-v="20000">20k</button>
+      <button class="coin" data-v="50000">50k</button>
+      <button class="coin" data-v="100000">100k</button>
+    </div>
+
+    <button class="btn" id="confirmPay">Konfirmasi Pembayaran</button>
+    <button class="btn" id="backPay">← Kembali</button>
+    <button class="btn" id="resetBtn">Reset</button>
+  </div>
+
+  <!-- PAGE STRUK -->
+  <div id="pageDone" class="page card">
+    <h2>Pembelian Selesai</h2>
+
+    <div id="receiptBox" style="
+      background:var(--glass);
+      padding:16px;
+      border-radius:14px;
+      margin-top:12px;
+    "></div>
+
+    <button class="btn" id="backHome">← Kembali ke Halaman Utama</button>
+  </div>
+
+</div>
+
+<script>
+// -------- DATA & STATE --------
+const products = [
+  {id:1, name:"Cimory Strawberry", price:10000, img:"produk/cimoryS.jpg"},
+  {id:2, name:"Cimory Marie Biskuit", price:10000, img:"produk/cimoryM.jpeg"},
+  {id:3, name:"Cimory Bluebery", price:10000, img:"produk/cimoryB.jpg"},
+  {id:4, name:"Cimory Coklat", price:10000, img:"produk/cimoryC.jpg"},
+  {id:5, name:"Cimory Tiramisu", price:10000, img:"produk/cimoryT.jpg"},
+  {id:6, name:"Cimory Matcha", price:10000, img:"produk/cimoryMatcha.jpg"},
+  {id:7, name:"Cimory Almont", price:10000, img:"produk/cimoryAl.jpg"},
+  {id:8, name:"Cimory Hazelnut", price:10000, img:"produk/cimoryH.jpg"},
+  {id:9, name:"Cimory Peanut Butter", price:10000, img:"produk/cimoryP.jpg"},
+  {id:10, name:"UltraMilk Caramel", price:10000, img:"produk/ultraC.jpg"},
+  {id:11, name:"UltraMilk Strawberry", price:10000, img:"produk/ultraS.jpg"},
+  {id:12, name:"UltraMilk Coklat", price:10000, img:"produk/utraC.jpeg"}
+];
+
+let cart = [];          // array of {id, name, price, qty}
+let saldo = 0;
+
+// -------- ELEMENTS --------
+const pageProducts = document.getElementById('pageProducts');
+const pagePay      = document.getElementById('pagePay');
+const pageDone     = document.getElementById('pageDone');
+
+const productList  = document.getElementById('productList');
+const cartList     = document.getElementById('cartList');
+
+const nextToPayBtn = document.getElementById('nextToPay');
+const confirmPay   = document.getElementById('confirmPay');
+const backPayBtn   = document.getElementById('backPay');
+const backHomeBtn  = document.getElementById('backHome');
+const resetBtn     = document.getElementById('resetBtn');
+
+const totalHargaEl   = document.getElementById('totalHarga');
+const saldoDisplayEl = document.getElementById('saldoDisplay');
+const statusTextEl   = document.getElementById('statusText');
+const changeEl       = document.getElementById('change');
+const receiptBox     = document.getElementById('receiptBox');
+
+// -------- RENDER PRODUCTS --------
+function loadProducts(){
+  productList.innerHTML = "";
+  products.forEach(p=>{
+    const div = document.createElement("div");
+    div.className = "prod";
+    div.innerHTML = `
+      <img src="${p.img}">
+      <div>${p.name}</div>
+      <div class='price'>Rp${p.price.toLocaleString()}</div>
+    `;
+    div.addEventListener('click', ()=> chooseProduct(p, div));
+    productList.appendChild(div);
+  });
+}
+loadProducts();
+
+// -------- CART HELPERS --------
+function findCartItem(id){ return cart.find(i => i.id === id); }
+
+function chooseProduct(prod, el){
+  const found = findCartItem(prod.id);
+  if(found) found.qty++;
+  else cart.push({...prod, qty:1});
+  // visual selected (non-persistent)
+  el.classList.add("selected");
+  renderCart();
+}
+
+function renderCart(){
+  if(cart.length === 0){
+    cartList.innerHTML = "<i>Belum ada produk</i>";
+    totalHargaEl.textContent = "Rp0";
+    return;
+  }
+  let html = "";
+  cart.forEach(item=>{
+    html += `
+      <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;background:var(--glass);padding:8px;border-radius:10px;'>
+        <div>
+          <strong>${item.name}</strong><br>
+          Rp${item.price.toLocaleString()}
+        </div>
+        <div style='display:flex;align-items:center;gap:8px;'>
+          <button data-id="${item.id}" class="small-btn dec" style='padding:6px 12px;border-radius:8px;background:var(--glass);color:white;border:0;'>-</button>
+          <span>${item.qty}</span>
+          <button data-id="${item.id}" class="small-btn inc" style='padding:6px 12px;border-radius:8px;background:var(--glass);color:white;border:0;'>+</button>
+        </div>
+      </div>
+    `;
+  });
+  cartList.innerHTML = html;
+
+  // attach listeners to newly created inc/dec
+  cartList.querySelectorAll('.inc').forEach(btn=>{
+    btn.addEventListener('click', ()=> changeQty(parseInt(btn.dataset.id), +1));
+  });
+  cartList.querySelectorAll('.dec').forEach(btn=>{
+    btn.addEventListener('click', ()=> changeQty(parseInt(btn.dataset.id), -1));
+  });
+
+  // update total display
+  const total = cart.reduce((s,i)=> s + i.qty * i.price, 0);
+  totalHargaEl.textContent = `Rp${total.toLocaleString()}`;
+}
+
+function changeQty(id, delta){
+  const item = findCartItem(id);
+  if(!item) return;
+  item.qty += delta;
+  if(item.qty <= 0) cart = cart.filter(i=> i.id !== id);
+  renderCart();
+}
+
+// -------- NAVIGATION & UI --------
+nextToPayBtn.addEventListener('click', ()=>{
+  if(cart.length === 0){ alert("Keranjang kosong"); return; }
+  pageProducts.classList.remove('active');
+  pagePay.classList.add('active');
+  // reset saldo display & status
+  saldo = 0;
+  updatePaymentUI();
+});
+
+backPayBtn.addEventListener('click', ()=>{
+  pagePay.classList.remove('active');
+  pageProducts.classList.add('active');
+});
+
+backHomeBtn.addEventListener('click', ()=>{
+  // reset state and go home
+  cart = [];
+  saldo = 0;
+  renderCart();
+  updatePaymentUI();
+  pageDone.classList.remove('active');
+  pageProducts.classList.add('active');
+});
+
+resetBtn.addEventListener('click', ()=>{
+  // full reset
+  cart = [];
+  saldo = 0;
+  renderCart();
+  updatePaymentUI();
+  pagePay.classList.remove('active');
+  pageProducts.classList.add('active');
+});
+
+// -------- PAYMENT LOGIC --------
+function updatePaymentUI(){
+  const total = cart.reduce((s,i)=> s + i.qty * i.price, 0);
+  totalHargaEl.textContent = `Rp${total.toLocaleString()}`;
+  saldoDisplayEl.textContent = `Rp${saldo.toLocaleString()}`;
+  statusTextEl.textContent = "Masukkan uang lalu tekan Konfirmasi";
+  changeEl.textContent = "Rp0";
+}
+
+// coin buttons
+document.querySelectorAll('.coin').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const v = parseInt(btn.dataset.v);
+    if(isNaN(v)) return;
+    saldo += v;
+    updatePaymentUI();
+  });
+});
+
+// confirm payment
+confirmPay.addEventListener('click', ()=>{
+  const total = cart.reduce((s,i)=> s + i.qty * i.price, 0);
+  if(saldo < total){
+    const kurang = total - saldo;
+    statusTextEl.innerHTML = `
+      <span style="color:#ff4d4d;font-size:20px;font-weight:bold;">
+        UANG KURANG Rp${kurang.toLocaleString()}
+      </span><br>Masukkan uang lagi.
+    `;
+    changeEl.textContent = "Rp0";
+    return;
+  }
+
+  const kembali = saldo - total;
+
+  // generate receipt HTML
+  let strukHTML = "<h3>Struk Pembelian</h3><hr>";
+  cart.forEach(item=>{
+    strukHTML += `
+      <div style="margin-bottom:8px;">
+        <strong>${item.name}</strong> (${item.qty}x) — Rp${(item.price * item.qty).toLocaleString()}
+      </div>
+    `;
+  });
+  strukHTML += `
+    <hr>
+    <div>Total: <strong>Rp${total.toLocaleString()}</strong></div>
+    <div>Uang Diterima: <strong>Rp${saldo.toLocaleString()}</strong></div>
+    <div>Kembalian: <strong>Rp${kembali.toLocaleString()}</strong></div>
+  `;
+
+  receiptBox.innerHTML = strukHTML;
+
+  // go to done page
+  pagePay.classList.remove('active');
+  pageDone.classList.add('active');
+});
+
+// initial render
+renderCart();
+updatePaymentUI();
+</script>
+
+</body>
+</html>
